@@ -11,14 +11,6 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from typing import List, Tuple, Union
 
-GENRES = ["unknown", "Action", "Adventure", "Animation", "Children's", "Comedy", "Crime", "Documentary", "Drama",
-          "Fantasy", "Film-Noir", "Horror", "Musical", "Mystery", "Romance", "Sci-Fi", "Thriller", "War", "Western"
-          ]
-
-
-def _convert_date(__x: str):
-    return pd.to_datetime(__x).date().toordinal()
-
 
 class Recommender:
     """
@@ -75,8 +67,6 @@ class Recommender:
         Returns:
             A Dataframe with the preprocessed data.
         """
-        global GENRES
-
         _movies_ids = []
         _ratings = []
         for _movie in __movies:
@@ -116,7 +106,7 @@ class Recommender:
         Returns:
             List of films: its names and the IMDb url.
         """
-        _movies = list(*zip(movies))[0]
+        _movies = list(map(lambda x: x[0], movies))
         _params = self._preprocess_to_suggest(age, gender, occupation, movies)
 
         _neighbors = self._knn.kneighbors(_params, return_distance=False)
