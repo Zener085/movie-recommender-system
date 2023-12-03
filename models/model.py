@@ -37,9 +37,8 @@ class Recommender:
         """
         __data = __data.copy()
         self._k = __k
-        self._init_preprocess(__data)
-        _knn_data = self._data.drop(["UserId", "ItemId", "Title", "IMDB_URL"], axis=1)
-        self._knn = NearestNeighbors(n_neighbors=300, n_jobs=-1, **kwargs).fit(_knn_data)
+        _knn_data = self._init_preprocess(__data)
+        self._knn = NearestNeighbors(n_neighbors=__k, n_jobs=-1, metric="cosine", **kwargs).fit(_knn_data)
 
     def _init_preprocess(self, __data: pd.DataFrame):
         """
@@ -52,18 +51,18 @@ class Recommender:
         __data["Gender"] = __data["Gender"] == "M"
         __data["Occupation"] = self._encoder.fit_transform(__data["Occupation"])
 
-        __data["ReleaseDate"] = __data["ReleaseDate"].apply(_convert_date)
         __data["Rating"] = __data["Rating"].apply(lambda x: 5 - x)
-
-        self._scaler = StandardScaler()
-        __data[["Rating", "Age", "Gender", "Occupation", "ReleaseDate"]] = self._scaler.fit_transform(
-            __data[["Rating", "Age", "Gender", "Occupation", "ReleaseDate"]]
-        )
-
         self._data = __data
 
+        _knn_data = __data.pivot_table("Rating", "UserId", "ItemId").fillna(5)
+        _knn_data = pd.merge(_knn_data, __data[["UserId", "Age", "Gender", "Occupation"]], on="UserId")
+        _knn_data.columns = _knn_data.columns.astype(str)
+
+        self._scaler = StandardScaler()
+        return self._scaler.fit_transform(_knn_data.drop("UserId", axis=1))
+
     def _preprocess_to_suggest(self, __age: int, __gender: str, __occupation: str,
-                               __movies: List[Tuple[Union[int, str], int]]) -> List[pd.DataFrame]:
+                               __movies: List[Tuple[Union[int, str], int]]) -> pd.DataFrame:
         """
         Preprocesses data to use it for suggestions.
 
@@ -89,26 +88,17 @@ class Recommender:
             _movies_ids.append(_movie_id)
             _ratings.append(5 - _movie[1])
 
-        _users = []
+        _user = {str(_id): 5 if _id not in _movies_ids else _ratings.pop(0) for _id in
+                 sorted(self._data["ItemId"].unique().tolist())}
 
-        for _rating, _movie_id in zip(_ratings, _movies_ids):
-            _user = pd.DataFrame({
-                "ItemId": [_movie_id],
-                "Rating": [_rating],
-                "Age": [__age],
-                "Gender": [__gender == "M"],
-                "Occupation": [__occupation]
-            })
-            _user["Occupation"] = self._encoder.transform(_user["Occupation"])
-            _movies_genres = self._data[self._data["ItemId"].isin(_movies_ids)][["ItemId", "ReleaseDate"] + GENRES]
+        _user["Age"] = [__age]
+        _user["Gender"] = [__gender == "M"]
+        _user["Occupation"] = [__occupation]
+        _user = pd.DataFrame(_user)
 
-            _user = pd.merge(_user, _movies_genres, on="ItemId").drop("ItemId", axis=1)
-            _user[["Rating", "Age", "Gender", "Occupation", "ReleaseDate"]] = self._scaler.transform(
-                _user[["Rating", "Age", "Gender", "Occupation", "ReleaseDate"]]
-            )
-            _users.append(_user)
+        _user["Occupation"] = self._encoder.transform(_user["Occupation"])
 
-        return _users
+        return self._scaler.transform(_user)
 
     def suggest(self, age: int, gender: str, occupation: str, movies: List[Tuple[Union[int, str], int]]) \
             -> List[Tuple[str, str]]:
@@ -126,14 +116,11 @@ class Recommender:
         Returns:
             List of films: its names and the IMDb url.
         """
-        _params_list = self._preprocess_to_suggest(age, gender, occupation, movies)
+        _movies = list(*zip(movies))[0]
+        _params = self._preprocess_to_suggest(age, gender, occupation, movies)
 
-        _distances, _neighbors = [], []
-        for _params in _params_list:
-            _distance, _neighbor = self._knn.kneighbors(_params)
-            _distances.extend(_distance.tolist()), _neighbors.extend(_neighbor.tolist())
-        _, _sorted_neighbors = zip(*sorted(zip(_distances, _neighbors)))
-        _similar = self._data.iloc[_sorted_neighbors[0]]
+        _neighbors = self._knn.kneighbors(_params, return_distance=False)
+        _similar = self._data.iloc[_neighbors[0]]
         return list(dict.fromkeys(zip(_similar["Title"], _similar["IMDB_URL"])))[:self._k]
 
 
