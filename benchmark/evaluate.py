@@ -14,6 +14,16 @@ from models.model import Recommender
 
 
 def _generate_user(__id: int, __data: pd.DataFrame) -> List:
+    """
+    Generates a single user for putting it as an input to the model.
+
+    Parameters:
+        __id: The id of the user.
+        __data: The dataframe containing the user information.
+
+    Returns:
+        __user: The list of information about the user and what movies he likes.
+    """
     _user = __data[__data["UserId"] == __id][["Age", "Gender", "Occupation"]].iloc[0].tolist()
     _user.append([])
     for _title, _rating in __data[__data["UserId"] == __id][["Title", "Rating"]].values:
@@ -24,6 +34,16 @@ def _generate_user(__id: int, __data: pd.DataFrame) -> List:
 
 
 def _generate_test(__data: pd.DataFrame, __total: int = 1000) -> Tuple[List, List]:
+    """
+    Generates a test data for the model evaluation.
+
+    Parameters:
+        __data: The dataframe with user information.
+        __total: The number of users that would be used for evaluation.
+
+    Returns:
+        list of users and their favorite movies.
+    """
     _users, _likes = [], []
     while len(_users) < __total:
         _user_id = np.random.choice(__data["UserId"].unique())
@@ -36,6 +56,13 @@ def _generate_test(__data: pd.DataFrame, __total: int = 1000) -> Tuple[List, Lis
 
 
 def evaluate(recommender: Recommender, __data: pd.DataFrame):
+    """
+    Evaluates the model on the test data. Prints scores of accuracy and F1 metrics.
+
+    Parameters:
+        recommender: The recommender system to be used for evaluation.
+        __data: The dataframe with user information.
+    """
     _total = 1000
     _pred = []
     _ideal = [True] * _total
